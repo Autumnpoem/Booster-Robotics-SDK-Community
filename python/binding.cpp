@@ -20,6 +20,7 @@
 #include "booster/idl/b1/HandReplyParam.h"
 #include "booster/idl/b1/HandTouchData.h"
 #include "booster/idl/b1/HandTouchParam.h"
+#include "booster/idl/b1/RemoteControllerState.h"
 
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
@@ -38,6 +39,7 @@ using booster_interface::msg::HandReplyParam;
 
 using booster_interface::msg::HandTouchData;
 using booster_interface::msg::HandTouchParam;
+using booster_interface::msg::RemoteControllerState;
 
 namespace booster::robot::b1 {
 class __attribute__((visibility("hidden"))) B1LowStateSubscriber : public std::enable_shared_from_this<B1LowStateSubscriber> {
@@ -225,6 +227,81 @@ private:
     ChannelPtr<Odometer> channel_ptr_;
     py::function py_handler_;
     const std::string channel_name_ = kTopicOdometerState;
+};
+
+// Remote Controller State Subscriber
+class __attribute__((visibility("hidden"))) B1RemoteControllerStateSubscriber : public std::enable_shared_from_this<B1RemoteControllerStateSubscriber> {
+public:
+    B1RemoteControllerStateSubscriber(const py::function &py_handler) :
+        py_handler_(py_handler) {
+    }
+
+    void InitChannel() {
+        py::gil_scoped_release release;
+        auto weak_this = std::weak_ptr<B1RemoteControllerStateSubscriber>(shared_from_this());
+        channel_ptr_ = booster::robot::ChannelFactory::Instance()->CreateRecvChannel<RemoteControllerState>(channel_name_, [weak_this](const void *msg) {
+            if (auto shared_this = weak_this.lock()) {
+                {
+                    py::gil_scoped_acquire acquire;
+                    const RemoteControllerState *rc_state_msg = static_cast<const RemoteControllerState *>(msg);
+                    shared_this->py_handler_(rc_state_msg);
+                }
+            }
+        });
+    }
+
+    void CloseChannel() {
+        py::gil_scoped_release release;
+        if (channel_ptr_) {
+            booster::robot::ChannelFactory::Instance()->CloseReader(channel_name_);
+            channel_ptr_.reset();
+        }
+    }
+
+    const std::string &GetChannelName() const {
+        return channel_name_;
+    }
+
+private:
+    ChannelPtr<RemoteControllerState> channel_ptr_;
+    py::function py_handler_;
+    const std::string channel_name_ = "rt/remote_controller_state";
+};
+
+// Remote Controller State Publisher - 用于模拟手柄输入
+class __attribute__((visibility("hidden"))) B1RemoteControllerStatePublisher {
+public:
+    explicit B1RemoteControllerStatePublisher() :
+        channel_name_("rt/remote_controller_state") {
+    }
+
+    void InitChannel() {
+        py::gil_scoped_release release;
+        channel_ptr_ = ChannelFactory::Instance()->CreateSendChannel<RemoteControllerState>(channel_name_);
+    }
+
+    bool Write(RemoteControllerState *msg) {
+        if (channel_ptr_) {
+            return channel_ptr_->Write(msg);
+        }
+        return false;
+    }
+
+    void CloseChannel() {
+        py::gil_scoped_release release;
+        if (channel_ptr_) {
+            ChannelFactory::Instance()->CloseWriter(channel_name_);
+            channel_ptr_.reset();
+        }
+    }
+
+    const std::string &GetChannelName() const {
+        return channel_name_;
+    }
+
+private:
+    std::string channel_name_;
+    ChannelPtr<RemoteControllerState> channel_ptr_;
 };
 } // namespace booster::robot::b1
 
@@ -864,6 +941,104 @@ PYBIND11_MODULE(booster_robotics_sdk_python, m) {
                       (void(HandTouchData::*)(const HandTouchParam &)) & HandTouchData::touch_data)
         .def("__eq__", &HandTouchData::operator==)
         .def("__ne__", &HandTouchData::operator!=);
+
+    // Remote Controller State bindings
+    py::class_<RemoteControllerState>(m, "RemoteControllerState")
+        .def(py::init<>())
+        .def(py::init<const RemoteControllerState &>())
+        .def_property("event",
+                      (uint32_t(RemoteControllerState::*)() const) & RemoteControllerState::event,
+                      (void(RemoteControllerState::*)(uint32_t)) & RemoteControllerState::event)
+        .def_property("lx",
+                      (float(RemoteControllerState::*)() const) & RemoteControllerState::lx,
+                      (void(RemoteControllerState::*)(float)) & RemoteControllerState::lx)
+        .def_property("ly",
+                      (float(RemoteControllerState::*)() const) & RemoteControllerState::ly,
+                      (void(RemoteControllerState::*)(float)) & RemoteControllerState::ly)
+        .def_property("rx",
+                      (float(RemoteControllerState::*)() const) & RemoteControllerState::rx,
+                      (void(RemoteControllerState::*)(float)) & RemoteControllerState::rx)
+        .def_property("ry",
+                      (float(RemoteControllerState::*)() const) & RemoteControllerState::ry,
+                      (void(RemoteControllerState::*)(float)) & RemoteControllerState::ry)
+        .def_property("a",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::a,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::a)
+        .def_property("b",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::b,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::b)
+        .def_property("x",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::x,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::x)
+        .def_property("y",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::y,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::y)
+        .def_property("lb",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::lb,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::lb)
+        .def_property("rb",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::rb,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::rb)
+        .def_property("lt",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::lt,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::lt)
+        .def_property("rt",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::rt,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::rt)
+        .def_property("ls",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::ls,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::ls)
+        .def_property("rs",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::rs,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::rs)
+        .def_property("back",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::back,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::back)
+        .def_property("start",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::start,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::start)
+        .def_property("hat_u",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::hat_u,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::hat_u)
+        .def_property("hat_d",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::hat_d,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::hat_d)
+        .def_property("hat_l",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::hat_l,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::hat_l)
+        .def_property("hat_r",
+                      (bool(RemoteControllerState::*)() const) & RemoteControllerState::hat_r,
+                      (void(RemoteControllerState::*)(bool)) & RemoteControllerState::hat_r)
+        .def("__eq__", &RemoteControllerState::operator==)
+        .def("__ne__", &RemoteControllerState::operator!=);
+
+    py::class_<robot::b1::B1RemoteControllerStateSubscriber, std::shared_ptr<robot::b1::B1RemoteControllerStateSubscriber>>(m, "B1RemoteControllerStateSubscriber")
+        .def(py::init<const py::function &>(), py::arg("handler"), R"pbdoc(
+                 /**
+                 * @brief init remote controller state subscriber with callback handler
+                 *
+                 * @param handler callback handler of remote controller state, the handler should accept one parameter of type RemoteControllerState
+                 *
+                 */
+            )pbdoc")
+        .def("InitChannel", &robot::b1::B1RemoteControllerStateSubscriber::InitChannel, "Init remote controller state subscription channel")
+        .def("CloseChannel", &robot::b1::B1RemoteControllerStateSubscriber::CloseChannel, "Close remote controller state subscription channel")
+        .def("GetChannelName", &robot::b1::B1RemoteControllerStateSubscriber::GetChannelName, "Get remote controller state subscription channel name");
+
+    // Remote Controller State Publisher - 用于模拟手柄输入
+    py::class_<robot::b1::B1RemoteControllerStatePublisher>(m, "B1RemoteControllerStatePublisher")
+        .def(py::init<>())
+        .def("InitChannel", &robot::b1::B1RemoteControllerStatePublisher::InitChannel, "Init remote controller state publication channel")
+        .def("Write", &robot::b1::B1RemoteControllerStatePublisher::Write, py::arg("msg"), R"pbdoc(
+                 /**
+                 * @brief write remote controller state message into channel, i.e. simulate gamepad input
+                 *
+                 * @param msg RemoteControllerState - set lx, ly (left stick), rx, ry (right stick), buttons etc.
+                 *
+                 */
+            )pbdoc")
+        .def("CloseChannel", &robot::b1::B1RemoteControllerStatePublisher::CloseChannel, "Close remote controller state publication channel")
+        .def("GetChannelName", &robot::b1::B1RemoteControllerStatePublisher::GetChannelName, "Get remote controller state publication channel name");
 #ifdef VERSION_INFO
     m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
 #else
